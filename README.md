@@ -112,7 +112,7 @@ MIT License – see `LICENSE` for details.
 
 ## Contact
 - Team: Arab Defenders  
-- Email: arabguard@team.com  
-- LinkedIn: [Your LinkedIn]  
+- Email: doaakarem798@gmail.com  
+- LinkedIn: [[Doaa](https://www.linkedin.com/in/doaakarem/)]  
 
 Thanks for using ArabGuard! Let's secure Arabic AI together. 🚀
