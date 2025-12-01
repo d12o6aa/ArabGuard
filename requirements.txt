@@ -1,5 +1,7 @@
 streamlit
 beautifulsoup4
+Unidecode
 pandas
 numpy
 requests
+lxml
