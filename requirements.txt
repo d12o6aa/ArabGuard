@@ -7,3 +7,5 @@ requests
 lxml
 enchant
 wordfreq
+Levenshtein
+emoji
