@@ -108,4 +108,4 @@ else:
         st.text_area("ادخل النص أو الكود اللي عايز تختبره...", value=ex4, height=200, key="ex4")
 
 st.markdown("---")
-st.caption("Smart Injection Killer v3.1 – صنع في مصر 🇪🇬 بكل حب وشراسة 🔥 | 2025")
+st.caption("Smart Injection Killer v0.1 – صنع في مصر 🇪🇬 بكل حب  | 2025")
