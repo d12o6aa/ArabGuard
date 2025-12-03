@@ -1,13 +1,13 @@
 import streamlit as st
 from normalizer import normalize_and_detect  # ← تأكد إن الدالة اسمها normalize_and_detect
 
-st.set_page_config(page_title="Smart Injection Killer v3.1", layout="wide")
+st.set_page_config(page_title="Smart Injection Killer v0.1", layout="wide")
 st.title("🛡️ Smart Injection Killer v3.1 — Real-time Pipeline View")
 
-st.markdown("""
-**الأقوى عالمياً في 2025 ضد Prompt Injection**  
-يدعم كل حيل الـ obfuscation + الكود الخبيث + infinite loops + hidden biases + semantic tricks  
-""")
+# st.markdown("""
+# **الأقوى عالمياً في 2025 ضد Prompt Injection**  
+# يدعم كل حيل الـ obfuscation + الكود الخبيث + infinite loops + hidden biases + semantic tricks  
+# """)
 
 user_input = st.text_area(
     "ادخل النص أو الكود اللي عايز تختبره (كل ما يكون خبيث أكتر كل ما الـ Score يطلع أعلى 🔥)",
@@ -23,7 +23,7 @@ if clear:
     st.rerun()
 
 if run and user_input:
-    with st.spinner("جاري التحليل الشرس..."):
+    with st.spinner("جاري التحليل ..."):
         final_text, score, decision, steps = normalize_and_detect(user_input, debug=True)
 
     # ===================================================================

@@ -10,3 +10,4 @@ wordfreq
 Levenshtein
 emoji
 nltk
+typing

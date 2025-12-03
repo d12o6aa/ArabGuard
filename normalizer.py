@@ -7,6 +7,8 @@ from bs4 import BeautifulSoup
 import emoji
 import nltk
 from nltk.corpus import words
+from typing import Tuple, Dict, Any
+
 nltk.download('words', quiet=True)
 english_words = set(w.lower() for w in words.words())
 english_words.update(['a', 'i', 'the', 'you', 'see', 'when', 'all', 'ignore', 'system', 'rules',
@@ -26,6 +28,50 @@ CONFUSABLES = { 'а':'a','ɑ':'a','à':'a','á':'a','â':'a','ã':'a','ä':'a','
                 'Ɩ':'l','ӏ':'l','ǀ':'l','|':'l','│':'l','∣':'l','￨':'l',
                 '0':'o','1':'i','3':'e','4':'a','5':'s','7':'t','8':'b','@':'a','$':'s','§':'s','£':'e','ƒ':'f','¢':'c' }
 CONFUSABLES.update({v: v for v in "abcdefghijklmnopqrstuvwxyz"})
+
+
+# =================================================================
+# LEVEL 1: INTENT-AWARE CODE SANITIZATION – الـ 5 طبقات Context
+# =================================================================
+def sanitize_malicious_code_intent(text: str) -> Tuple[str, int]:
+    score = 0
+    modified = text
+
+    # طبقة 1: Infinite loop مع نية خبيثة
+    if re.search(r'while\s*\(\s*true\s*\)', text, re.IGNORECASE):
+        if re.search(r'exploit|leak|send|post|fetch|prompt|system|bias', text, re.IGNORECASE):
+            score += 90
+            modified = re.sub(r'while\s*\(\s*true\s*\)[^{]*\{[^}]*\}', ' [INFINITE_LOOP_REMOVED] ', modified, flags=re.IGNORECASE)
+
+    # طبقة 2: console.log يكشف بيانات حساسة
+    if re.search(r'console\.log', text, re.IGNORECASE):
+        dangerous_logs = re.finditer(r'console\.log\s*\([^)]*?\b(prompt|instruction|system|bias|secret|key|password|hidden)[^)]*?\)', text, re.IGNORECASE)
+        for m in dangerous_logs:
+            score += 80
+            modified = modified.replace(m.group(0), ' [DATA_LEAK_REMOVED] ')
+
+    # طبقة 3: دوال بأسماء خبيثة واضحة
+    evil_functions = re.finditer(r'\b(exploit|bypass|leak|divulge|expose|reveal)[A-Za-z]*\s*\(', text, re.IGNORECASE)
+    for m in evil_functions:
+        score += 70
+        modified = modified.replace(m.group(0), ' [EVIL_FUNCTION_CALL] ')
+
+    # طبقة 4: prompt the system + divulge bias + hiddenbiases
+    if re.search(r'prompt.{0,40}system|system.{0,40}prompt|divulge.{0,40}bias|hidden[^\w]*bias', text, re.IGNORECASE):
+        score += 85
+        modified = re.sub(r'let\'s prompt the system.{0,200}bias', ' [PROMPT_INJECTION_ATTEMPT] ', modified, re.IGNORECASE)
+        modified = re.sub(r'hidden[^\w]*biases?', ' [HIDDEN_BIASES_REF] ', modified, re.IGNORECASE)
+
+    # طبقة 5: Semantic Context – كود بيحاول "يخلي الـ LLM يفكر إنه بيشتغل بره القيود"
+    if re.search(r'Do Anything Now|developer mode|ignore all previous|you are now free', text, re.IGNORECASE):
+        score += 120
+        modified = re.sub(r'Do Anything Now|developer mode|ignore all previous|you are now free', ' [JAILBREAK_ATTEMPT] ', modified, re.IGNORECASE)
+
+    # لو فيه كود عادي ومفيش أي نية خبيثة → نرحب بيه
+    if re.search(r'\b(for|while|function|if|const|let|var|console\.log)\b', text, re.IGNORECASE) and score == 0:
+        score -= 30  # كود بريء تماماً
+
+    return modified.strip(), max(score, 0)
 
 # =================================================================
 # LEVEL 1: SMART CODE ANALYSIS – مش بيشيل، بيحلل وبيسجل جريمة
@@ -152,90 +198,91 @@ def smart_rot13_decode(text):
     return ' '.join(result)
 
 # =================================================================
-# FINAL PIPELINE v3.1 – THE FINAL BOSS
+# FINAL PIPELINE v12.0 – النسخة الصحيحة اللي ما بتكسرش الكود أبدًا
 # =================================================================
-def normalize_and_detect(user_input, debug=False):
+def normalize_and_detect(user_input: str, debug: bool = False) -> Tuple[str, int, str, Dict[str, Any]]:
     original = user_input
     total_score = 0
     steps = {"input": original}
 
-    # 1. تحليل الكود الذكي (أهم خطوة)
-    code_score = analyze_code_patterns(original)
-    total_score += code_score
-    steps["code_analysis_score"] = code_score
+    # 1. Intent-Aware Code Sanitization (الأهم)
+    sanitized_text, intent_score = sanitize_malicious_code_intent(original)
+    total_score += intent_score
+    steps["intent_score"] = intent_score
+    steps["after_sanitization"] = sanitized_text
 
-    # 2. لو الكود أكيد خبيث جداً → امسحه فوراً (نادر جداً، بس موجود)
-    if code_score >= 100:  # مثلاً while(true) + console.log(secret) + exploit
-        user_input = re.sub(r'(for|while|function|if|const|let|var).*{.*?}', '[CODE_BLOCK_REMOVED_FOR_SECURITY]', user_input, flags=re.DOTALL)
-        steps["action"] = "suspicious code surgically removed"
-    
-    steps["after_code_check"] = user_input
+    # نستخدم النص المُصفّى فقط من دلوقتي
+    text = sanitized_text
 
-    # 3. باقي الـ normalization العادي
-    text = unicodedata.normalize('NFKC', user_input)
+    # 2. باقي الـ normalization (بس بدون تكسير الكود!)
+    text = unicodedata.normalize('NFKC', text)
     text = recursive_decode(text)
+
+    # Arabic normalization
     text = re.sub(r'[\u0610-\u061A\u064B-\u065F\u06D6-\u06DC\u06DF-\u06E8\u06EA-\u06ED]', '', text)
     text = re.sub(r'[إأآا]', 'ا', text)
     text = re.sub(r'[ىي]', 'ي', text)
     text = re.sub(r'ـ+', '', text)
     text = re.sub(r'[\u200F\u202B\u202E\u202D\u2066-\u2069]', '', text)
-    
+
+    # HTML + Markdown (بس من غير ما نشيل الأقواس!)
     text = BeautifulSoup(text, "html.parser").get_text()
-    text = re.sub(r"`([^`]+)`", r"\1", text)
-    text = re.sub(r"[*_#>\[\]\(\)]", "", text)
+    text = re.sub(r"`([^`]+)`", r"\1", text)  # code blocks بس
     text = html.unescape(text)
-    
+
+    # Zero-width + control chars
     text = re.sub(r'[\u200b-\u200f\u202a-\u202e\u2060-\u2069\u180e\ufeff\0-\x1f\x7f-\x9f]', '', text)
     text = emoji.replace_emoji(text, '')
-    
+
+    # Encoding decode
     text = re.sub(r'[A-Za-z0-9+/=]{12,}', lambda m: safe_base64_decode(m.group()) or m.group(), text)
     text = re.sub(r'\b[0-9a-fA-F]{8,}\b', lambda m: safe_hex_decode(m.group()) or m.group(), text)
     text = smart_rot13_decode(text)
-    
-    text = ''.join(CONFUSABLES.get(c.lower(), c) for c in text)
-    text = re.sub(r'\s+', ' ', text)
-    
-    text = merge_split_letters(text)
-    text = re.sub(r"(.)\1{2,}", r"\1", text)
-    
-    final_text = text.lower().strip()
-    steps["normalized"] = final_text
 
-    # 4. Keyword scoring
-    words_list = re.findall(r'\b\w+\b', final_text)
+    # Deobfuscation (بس على الكلمات المستقلة – مش على الكود!)
+    def safe_deobfuscate(t):
+        words = re.findall(r'\b\w+\b', t)
+        non_words = re.split(r'\b\w+\b', t)
+        result = [non_words[0]]
+        for i, word in enumerate(words):
+            if word.isalpha() and len(word) > 2:
+                new_word = ''.join(CONFUSABLES.get(c.lower(), c.lower()) for c in word)
+                if word[0].isupper():
+                    new_word = new_word.capitalize()
+                result.append(new_word)
+            else:
+                result.append(word)
+            result.append(non_words[i+1])
+        return ''.join(result)
+
+    text = safe_deobfuscate(text)
+    text = re.sub(r'\s+', ' ', text)
+
+    # Merge split letters + repeated chars
+    text = merge_split_letters(text)
+    text = re.sub(r"(.)\1{3,}", r"\1", text)
+
+    final_text = text.strip()
+    steps["final_normalized"] = final_text
+
+    # Keyword scoring
+    words_list = re.findall(r'\b\w+\b', final_text.lower())
     for word in words_list:
         for dangerous in DANGEROUS_KEYWORDS:
             if word == dangerous:
-                total_score += 20
+                total_score += 25
             elif is_typoglycemia_variant(word, dangerous):
-                total_score += 28
-            elif len(word) > 4 and dangerous in word:
-                total_score += 12
+                total_score += 35
 
     if len([w for w in words_list if w in DANGEROUS_KEYWORDS]) >= 2:
-        total_score += 35
+        total_score += 50
 
-    if re.search(r'(base64|hex|rot13|encode|decode|obfuscat)', final_text):
-        total_score += 20
-
-    final_score = min(total_score, 200)
+    final_score = min(total_score, 300)
     steps["final_score"] = final_score
 
-    # القرار النهائي
-    if final_score >= 80:
-        decision = "BLOCKED"
-        reason = "High-risk prompt injection pattern detected"
-    elif final_score >= 50:
-        decision = "FLAG_FOR_REVIEW"
-        reason = "Suspicious input – manual review recommended"
-    else:
-        decision = "SAFE"
-        reason = "No injection detected"
-
+    decision = "BLOCKED" if final_score >= 120 else ("FLAG" if final_score >= 80 else "SAFE")
     steps["decision"] = decision
-    steps["reason"] = reason
 
     if debug:
         return final_text, final_score, decision, steps
-    else:
-        return final_text, final_score >= 80  # True = block
+    return final_text, final_score >= 120
